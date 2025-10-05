@@ -47,4 +47,7 @@ Thumbs.db
 htmlcov/
 
 # MCP
-.cursor/
+.cursor/mcp.json
+
+# Env
+.env
