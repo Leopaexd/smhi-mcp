@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "smhi_weather": {
+      "command": "uv",
+      "args": ["run", "python", "smhi_weather_mcp.py"],
+      "enabled": true
+    }
+  }
+}
