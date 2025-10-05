@@ -27,9 +27,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/smhi-weather-mcp"
-Repository = "https://github.com/yourusername/smhi-weather-mcp"
-Issues = "https://github.com/yourusername/smhi-weather-mcp/issues"
+Homepage = "https://github.com/Leopaexd/smhi-weather-mcp"
+Repository = "https://github.com/Leopaexd/smhi-weather-mcp"
+Issues = "https://github.com/Leopaexd/smhi-weather-mcp/issues"
 
 [build-system]
 requires = ["hatchling"]
