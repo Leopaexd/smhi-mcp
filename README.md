@@ -34,36 +34,23 @@ pip install fastmcp httpx pydantic loguru
 
 ## Configuration
 
-### As a Git Submodule (Recommended)
-
-Add this repository as a submodule to your project:
-
-```bash
-git submodule add https://github.com/yourusername/smhi-weather-mcp.git
-git submodule update --init --recursive
-```
-
-Then add to your MCP settings (e.g., `.cursor/mcp.json` for Cursor):
+Add to your MCP settings (e.g., `.cursor/mcp.json` for Cursor):
 
 ```json
 {
   "mcpServers": {
     "smhi_weather": {
       "command": "uv",
-      "args": ["run", "python", "smhi-weather-mcp/smhi_weather_mcp.py"],
+      "args": ["run", "python", "path/to/smhi_weather_mcp.py"],
       "enabled": true
     }
   }
 }
 ```
 
-### Standalone Installation
-
-Or clone and run directly:
+Or run directly:
 
 ```bash
-git clone https://github.com/yourusername/smhi-weather-mcp.git
-cd smhi-weather-mcp
 python smhi_weather_mcp.py
 ```
 
