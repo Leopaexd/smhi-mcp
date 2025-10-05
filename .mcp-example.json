@@ -2,7 +2,7 @@
   "mcpServers": {
     "smhi_weather": {
       "command": "uv",
-      "args": ["run", "python", "smhi_weather_mcp.py"],
+      "args": ["run", "python", "path/to/smhi-weather-mcp/smhi_weather_mcp.py"],
       "enabled": true
     }
   }
