@@ -38,6 +38,7 @@ if is_cloud_env:
         backtrace=True,
         diagnose=True
     )
+    logger.info("Cloud environment detected, logging to stdout/stderr only")
 else:
     # Local development - use file logging
     os.makedirs("logs", exist_ok=True)
