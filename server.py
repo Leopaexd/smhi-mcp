@@ -13,13 +13,28 @@ from pydantic import BaseModel, Field
 from fastmcp import FastMCP
 from loguru import logger
 
-# Configure logger
+# Configure logger with enhanced settings
+logger.remove()  # Remove default handler
 logger.add(
     "logs/smhi_weather_mcp.log",
     rotation="1 week",
     retention="1 month",
-    level="INFO"
+    level="INFO",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+    backtrace=True,
+    diagnose=True
 )
+logger.add(
+    "logs/smhi_weather_mcp_debug.log",
+    rotation="1 day",
+    retention="1 week",
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+    backtrace=True,
+    diagnose=True
+)
+
+logger.info("SMHI Weather MCP Server preparing...")
 
 # Default coordinates for Stockholm (Södermalm)
 DEFAULT_LAT = 59.32
@@ -61,9 +76,6 @@ WEATHER_SYMBOLS = {
     26: "Moderate snowfall",
     27: "Heavy snowfall"
 }
-
-# Initialize FastMCP server
-mcp = FastMCP("SMHI Weather Forecast")
 
 
 # Structured data models
@@ -108,6 +120,12 @@ class WeatherForecast(BaseModel):
     planning_tips: list[str] = Field(description="Actionable planning tips")
     formatted_text: str = Field(description="Human-readable formatted forecast")
 
+    
+# Initialize FastMCP server
+logger.info("SMHI Weather MCP Server initializing...")
+mcp = FastMCP("SMHI Weather Forecast")
+logger.info("SMHI Weather MCP Server initialized")
+
 
 @mcp.tool()
 def get_weather_forecast(
@@ -140,11 +158,16 @@ def get_weather_forecast(
     """
     try:
         # Validate inputs
+        logger.debug(f"Validating inputs: lat={lat}, lon={lon}, hours={forecast_hours}, detail={detail_level}, include_night={include_night}")
+        
         if not (55.0 <= lat <= 70.0):
+            logger.error(f"Invalid latitude: {lat} (must be between 55.0 and 70.0)")
             raise ValueError("Latitude must be between 55.0 and 70.0 (Sweden region)")
         if not (10.0 <= lon <= 25.0):
+            logger.error(f"Invalid longitude: {lon} (must be between 10.0 and 25.0)")
             raise ValueError("Longitude must be between 10.0 and 25.0 (Sweden region)")
         if not (1 <= forecast_hours <= 120):
+            logger.error(f"Invalid forecast hours: {forecast_hours} (must be between 1 and 120)")
             raise ValueError("Forecast hours must be between 1 and 120")
         
         logger.info(f"Fetching weather forecast for lat={lat}, lon={lon}, hours={forecast_hours}, detail={detail_level}, include_night={include_night}")
@@ -152,12 +175,17 @@ def get_weather_forecast(
         # Full detail level automatically includes nighttime
         if detail_level == "full":
             include_night = True
+            logger.debug("Detail level 'full' automatically enables include_night")
         
         # Fetch weather data
+        logger.debug("Starting API request to SMHI")
         api_data = fetch_weather_forecast(lat, lon)
+        logger.info(f"Successfully fetched API data with {len(api_data.get('timeSeries', []))} time series entries")
         
         # Parse and structure the data
+        logger.debug("Parsing and structuring forecast data")
         forecast = parse_forecast_data(api_data, forecast_hours, detail_level, include_night)
+        logger.info(f"Successfully created forecast with {len(forecast.hourly)} hourly entries")
         
         return forecast
         
@@ -172,35 +200,60 @@ def get_weather_forecast(
 
 def fetch_weather_forecast(lat: float, lon: float) -> dict:
     """Fetch weather forecast from SMHI API"""
+    logger.debug(f"Fetching weather forecast for coordinates: lat={lat}, lon={lon}")
+    
     # Round coordinates to 6 decimals as SMHI expects
     lat = round(lat, 6)
     lon = round(lon, 6)
+    logger.debug(f"Rounded coordinates: lat={lat}, lon={lon}")
     
     # Construct API URL
     url = f"{SMHI_API_BASE}/lon/{lon}/lat/{lat}/data.json"
+    logger.debug(f"API URL: {url}")
     
-    with httpx.Client(timeout=30.0) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        data = response.json()
-        
-    return data
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            logger.debug("Making HTTP request to SMHI API")
+            response = client.get(url)
+            logger.debug(f"Received response with status code: {response.status_code}")
+            response.raise_for_status()
+            data = response.json()
+            logger.debug(f"Successfully parsed JSON response with {len(data.get('timeSeries', []))} entries")
+            
+        return data
+    except httpx.TimeoutException:
+        logger.error("Timeout while fetching weather data from SMHI API")
+        raise
+    except httpx.RequestError as e:
+        logger.error(f"Request error while fetching weather data: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error while fetching weather data: {e}")
+        raise
 
 
 def parse_forecast_data(data: dict, hours: int, detail_level: str, include_night: bool) -> WeatherForecast:
     """Parse API data into structured forecast"""
+    logger.debug(f"Parsing forecast data: hours={hours}, detail_level={detail_level}, include_night={include_night}")
+    
     # Parse timestamps and convert to Stockholm time
     ref_time = datetime.fromisoformat(data["referenceTime"].replace("Z", "+00:00")).astimezone(STOCKHOLM_TZ)
     approved_time = datetime.fromisoformat(data["approvedTime"].replace("Z", "+00:00")).astimezone(STOCKHOLM_TZ)
     now = datetime.now(STOCKHOLM_TZ)
     
+    logger.debug(f"Reference time: {ref_time}, Approved time: {approved_time}, Current time: {now}")
+    
     # Get location coordinates (GeoJSON format: [[lon, lat]])
     coords = data['geometry']['coordinates'][0]
     location_lon, location_lat = coords[0], coords[1]
+    logger.debug(f"Location coordinates: lat={location_lat}, lon={location_lon}")
     
     # Filter time series to requested hours
     time_series = data["timeSeries"]
+    logger.debug(f"Processing {len(time_series)} time series entries")
+    
     hourly_forecasts = []
+    filtered_count = 0
     
     for forecast in time_series:
         valid_time = datetime.fromisoformat(forecast["validTime"].replace("Z", "+00:00")).astimezone(STOCKHOLM_TZ)
@@ -209,6 +262,7 @@ def parse_forecast_data(data: dict, hours: int, detail_level: str, include_night
         if 0 <= hours_from_now <= hours:
             # Extract parameters
             params = {p["name"]: p for p in forecast["parameters"]}
+            logger.debug(f"Processing forecast for {valid_time} (hours from now: {hours_from_now:.1f})")
             
             # Get weather symbol and its meaning
             weather_symbol = params.get("Wsymb2", {}).get("values", [None])[0]
@@ -231,11 +285,17 @@ def parse_forecast_data(data: dict, hours: int, detail_level: str, include_night
                 weather_symbol_meaning=weather_symbol_meaning
             )
             hourly_forecasts.append(hourly)
+        else:
+            filtered_count += 1
+    
+    logger.info(f"Filtered {filtered_count} entries outside time range, kept {len(hourly_forecasts)} entries")
     
     if not hourly_forecasts:
+        logger.error("No forecast data available for the requested time period")
         raise ValueError("No forecast data available for the requested time period")
     
     # Calculate summary statistics
+    logger.debug("Calculating summary statistics")
     temps = [h.temperature for h in hourly_forecasts]
     winds = [h.wind_speed for h in hourly_forecasts]
     gusts = [h.wind_gust for h in hourly_forecasts if h.wind_gust is not None]
@@ -257,14 +317,23 @@ def parse_forecast_data(data: dict, hours: int, detail_level: str, include_night
         has_precipitation=any(p > 0 for p in precip_types)
     )
     
+    logger.debug(f"Summary: temp range {summary.min_temperature:.1f}-{summary.max_temperature:.1f}°C, "
+                f"wind {summary.avg_wind_speed:.1f}-{summary.max_wind_speed:.1f} m/s, "
+                f"precipitation: {summary.precipitation_types}")
+    
     # Generate planning tips
+    logger.debug("Generating planning tips")
     tips = generate_planning_tips(hourly_forecasts, summary)
+    logger.debug(f"Generated {len(tips)} planning tips")
     
     # Generate formatted text
+    logger.debug("Generating formatted text output")
     formatted_text = format_for_humans(
         now, location_lat, location_lon, approved_time, hours,
         hourly_forecasts, summary, tips, detail_level, include_night
     )
+    
+    logger.info(f"Successfully created complete forecast with {len(hourly_forecasts)} hourly entries and {len(tips)} planning tips")
     
     return WeatherForecast(
         current_time=now.isoformat(),
@@ -281,42 +350,54 @@ def parse_forecast_data(data: dict, hours: int, detail_level: str, include_night
 
 def generate_planning_tips(forecasts: list[HourlyForecast], summary: WeatherSummary) -> list[str]:
     """Generate actionable planning tips based on forecast"""
+    logger.debug("Generating planning tips based on forecast data")
     tips = []
     
     # Temperature tips
     if summary.max_temperature < 0:
         tips.append("❄️ Below freezing all day - dress warmly, icy conditions likely")
+        logger.debug("Added freezing temperature tip")
     elif summary.min_temperature < 5:
         tips.append("🧥 Cold temperatures - bring warm layers")
+        logger.debug("Added cold temperature tip")
     elif summary.max_temperature > 20:
         tips.append("☀️ Warm day - good for outdoor activities")
+        logger.debug("Added warm temperature tip")
     
     # Precipitation tips
     if summary.has_precipitation:
         if any(t in summary.precipitation_types for t in ["Snow", "Snow/Rain mix", "Freezing rain", "Freezing drizzle"]):
             tips.append("🌨️ Snow or freezing conditions expected - allow extra commute time")
+            logger.debug("Added snow/freezing precipitation tip")
         elif any(t in summary.precipitation_types for t in ["Rain", "Drizzle"]):
             tips.append("☔ Rain expected - bring umbrella, consider indoor activities")
+            logger.debug("Added rain precipitation tip")
     
     # Wind tips
     if summary.max_wind_gust and summary.max_wind_gust > 15:
         tips.append(f"💨 Strong wind gusts up to {summary.max_wind_gust:.1f} m/s - biking may be challenging")
+        logger.debug(f"Added strong wind gust tip (gusts: {summary.max_wind_gust:.1f} m/s)")
     elif summary.max_wind_speed > 10:
         tips.append("💨 Strong winds - biking may be challenging")
+        logger.debug(f"Added strong wind tip (max: {summary.max_wind_speed:.1f} m/s)")
     
     # Visibility tips
     low_vis = [f for f in forecasts if f.visibility and f.visibility < 1.0]
     if low_vis:
         tips.append("🌫️ Poor visibility expected - drive carefully")
+        logger.debug(f"Added poor visibility tip ({len(low_vis)} hours with <1km visibility)")
     
     # Thunder tips
     thunder_risk = [f for f in forecasts if f.thunder_probability and f.thunder_probability > 30]
     if thunder_risk:
         tips.append("⚡ Thunderstorm risk - avoid outdoor activities during peak hours")
+        logger.debug(f"Added thunderstorm risk tip ({len(thunder_risk)} hours with >30% probability)")
     
     if not tips:
         tips.append("✅ Good weather conditions for normal activities")
+        logger.debug("Added default good weather tip")
     
+    logger.debug(f"Generated {len(tips)} planning tips total")
     return tips
 
 
@@ -421,5 +502,16 @@ def format_precipitation(pcat: int, amount: float) -> str:
 
 
 if __name__ == "__main__":
-    # Run the server with stdio transport for Cursor integration
-    mcp.run(transport="stdio")
+    logger.info("Starting SMHI Weather MCP Server")
+    logger.info(f"Default coordinates: lat={DEFAULT_LAT}, lon={DEFAULT_LON}")
+    logger.info(f"Stockholm timezone: {STOCKHOLM_TZ}")
+    logger.info("Running server with stdio transport for Cursor integration")
+    
+    try:
+        # Run the server with stdio transport for Cursor integration
+        mcp.run(transport="stdio")
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user (Ctrl+C)")
+    except Exception as e:
+        logger.exception(f"Server error: {e}")
+        raise

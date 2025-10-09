@@ -41,7 +41,7 @@ Add to your MCP settings (e.g., `.cursor/mcp.json` for Cursor):
   "mcpServers": {
     "smhi_weather": {
       "command": "uv",
-      "args": ["run", "python", "path/to/smhi_weather_mcp.py"],
+      "args": ["run", "python", "path/to/smhi_weather_mcp/server.py"],
       "enabled": true
     }
   }
@@ -51,7 +51,7 @@ Add to your MCP settings (e.g., `.cursor/mcp.json` for Cursor):
 Or run directly:
 
 ```bash
-python smhi_weather_mcp.py
+python server.py
 ```
 
 ## Usage
