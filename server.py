@@ -13,26 +13,52 @@ from pydantic import BaseModel, Field
 from fastmcp import FastMCP
 from loguru import logger
 
-# Configure logger with enhanced settings
+# Configure logger for cloud/serverless environments
+import os
+import sys
+
 logger.remove()  # Remove default handler
-logger.add(
-    "logs/smhi_weather_mcp.log",
-    rotation="1 week",
-    retention="1 month",
-    level="INFO",
-    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-    backtrace=True,
-    diagnose=True
-)
-logger.add(
-    "logs/smhi_weather_mcp_debug.log",
-    rotation="1 day",
-    retention="1 week",
-    level="DEBUG",
-    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-    backtrace=True,
-    diagnose=True
-)
+
+# Check if we're in a cloud/serverless environment
+is_cloud_env = os.getenv("FASTMCP_CLOUD") or os.getenv("VERCEL") or os.getenv("RAILWAY") or os.getenv("FLY_APP_NAME")
+
+if is_cloud_env:
+    # In cloud environments, log to stdout/stderr only
+    logger.add(
+        sys.stdout,
+        level="INFO",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+        backtrace=True,
+        diagnose=True
+    )
+    logger.add(
+        sys.stderr,
+        level="ERROR",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+        backtrace=True,
+        diagnose=True
+    )
+else:
+    # Local development - use file logging
+    os.makedirs("logs", exist_ok=True)
+    logger.add(
+        "logs/smhi_weather_mcp.log",
+        rotation="1 week",
+        retention="1 month",
+        level="INFO",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+        backtrace=True,
+        diagnose=True
+    )
+    logger.add(
+        "logs/smhi_weather_mcp_debug.log",
+        rotation="1 day",
+        retention="1 week",
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+        backtrace=True,
+        diagnose=True
+    )
 
 logger.info("SMHI Weather MCP Server preparing...")
 
@@ -505,13 +531,24 @@ if __name__ == "__main__":
     logger.info("Starting SMHI Weather MCP Server")
     logger.info(f"Default coordinates: lat={DEFAULT_LAT}, lon={DEFAULT_LON}")
     logger.info(f"Stockholm timezone: {STOCKHOLM_TZ}")
-    logger.info("Running server with stdio transport for Cursor integration")
     
-    try:
-        # Run the server with stdio transport for Cursor integration
-        mcp.run(transport="stdio")
-    except KeyboardInterrupt:
-        logger.info("Server stopped by user (Ctrl+C)")
-    except Exception as e:
-        logger.exception(f"Server error: {e}")
-        raise
+    # Determine transport based on environment
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    port = int(os.getenv("PORT", "8000"))
+    
+    if is_cloud_env or transport == "http":
+        logger.info(f"Running server with HTTP transport on port {port} for cloud deployment")
+        try:
+            mcp.run(transport="http", port=port, host="0.0.0.0")
+        except Exception as e:
+            logger.exception(f"Server error: {e}")
+            raise
+    else:
+        logger.info("Running server with stdio transport for local development")
+        try:
+            mcp.run(transport="stdio")
+        except KeyboardInterrupt:
+            logger.info("Server stopped by user (Ctrl+C)")
+        except Exception as e:
+            logger.exception(f"Server error: {e}")
+            raise
