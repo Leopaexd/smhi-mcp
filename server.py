@@ -10,56 +10,40 @@ from datetime import datetime
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from loguru import logger
 
-# Configure logger for cloud/serverless environments
+# MCP servers use stdio for JSON-RPC communication - NO console logging allowed!
 import os
-import sys
 
-logger.remove()  # Remove default handler
+# Remove all default handlers (loguru adds stderr by default)
+logger.remove()
 
-# Check if we're in a cloud/serverless environment
-is_cloud_env = os.getenv("FASTMCP_CLOUD") or os.getenv("VERCEL") or os.getenv("RAILWAY") or os.getenv("FLY_APP_NAME")
+# Add ONLY file logging to avoid corrupting the MCP protocol
+os.makedirs("logs", exist_ok=True)
+logger.add(
+    "logs/smhi_weather_mcp.log",
+    rotation="1 week",
+    retention="1 month",
+    level="INFO",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+    backtrace=True,
+    diagnose=True
+)
+logger.add(
+    "logs/smhi_weather_mcp_debug.log",
+    rotation="1 day",
+    retention="1 week",
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+    backtrace=True,
+    diagnose=True
+)
 
-if is_cloud_env:
-    # In cloud environments, log to stdout/stderr only
-    logger.add(
-        sys.stdout,
-        level="INFO",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-        backtrace=True,
-        diagnose=True
-    )
-    logger.add(
-        sys.stderr,
-        level="ERROR",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-        backtrace=True,
-        diagnose=True
-    )
-    logger.info("Cloud environment detected, logging to stdout/stderr only")
-else:
-    # Local development - use file logging
-    os.makedirs("logs", exist_ok=True)
-    logger.add(
-        "logs/smhi_weather_mcp.log",
-        rotation="1 week",
-        retention="1 month",
-        level="INFO",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-        backtrace=True,
-        diagnose=True
-    )
-    logger.add(
-        "logs/smhi_weather_mcp_debug.log",
-        rotation="1 day",
-        retention="1 week",
-        level="DEBUG",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-        backtrace=True,
-        diagnose=True
-    )
+# Enable FastMCP client logging to appear in server logs
+import logging
+to_client_logger = logging.getLogger("fastmcp.server.context.to_client")
+to_client_logger.setLevel(logging.DEBUG)
 
 logger.info("SMHI Weather MCP Server preparing...")
 
@@ -155,12 +139,13 @@ logger.info("SMHI Weather MCP Server initialized")
 
 
 @mcp.tool()
-def get_weather_forecast(
+async def get_weather_forecast(
     lat: float = DEFAULT_LAT,
     lon: float = DEFAULT_LON,
     forecast_hours: int = 24,
     detail_level: Literal["summary", "detailed", "full"] = "detailed",
-    include_night: bool = False
+    include_night: bool = False,
+    ctx: Context = None,
 ) -> WeatherForecast:
     """
     Get weather forecast for a location in Sweden.
@@ -186,6 +171,8 @@ def get_weather_forecast(
     try:
         # Validate inputs
         logger.debug(f"Validating inputs: lat={lat}, lon={lon}, hours={forecast_hours}, detail={detail_level}, include_night={include_night}")
+        if ctx:
+            await ctx.info("Fetching weather forecast")
         
         if not (55.0 <= lat <= 70.0):
             logger.error(f"Invalid latitude: {lat} (must be between 55.0 and 70.0)")
@@ -213,15 +200,20 @@ def get_weather_forecast(
         logger.debug("Parsing and structuring forecast data")
         forecast = parse_forecast_data(api_data, forecast_hours, detail_level, include_night)
         logger.info(f"Successfully created forecast with {len(forecast.hourly)} hourly entries")
-        
+        if ctx:
+            await ctx.info("Weather forecast ready")
         return forecast
         
     except httpx.HTTPStatusError as e:
         error_msg = f"SMHI API error: {e.response.status_code} - {e.response.text}"
         logger.error(error_msg)
+        if ctx:
+            await ctx.error("Weather API returned error")
         raise RuntimeError(f"Error fetching weather forecast: {error_msg}")
     except Exception as e:
         logger.exception(f"Unexpected error fetching weather forecast: {e}")
+        if ctx:
+            await ctx.error("Unexpected error fetching weather data")
         raise
 
 
@@ -532,20 +524,20 @@ if __name__ == "__main__":
     logger.info("Starting SMHI Weather MCP Server")
     logger.info(f"Default coordinates: lat={DEFAULT_LAT}, lon={DEFAULT_LON}")
     logger.info(f"Stockholm timezone: {STOCKHOLM_TZ}")
-    
-    # Determine transport based on environment
+
+    # Decide transport based on environment (Cloud vs local)
     transport = os.getenv("MCP_TRANSPORT", "stdio")
-    port = int(os.getenv("PORT", "8000"))
-    
-    if is_cloud_env or transport == "http":
+
+    if transport == "http":
+        port = int(os.getenv("PORT", "8000"))
         logger.info(f"Running server with HTTP transport on port {port} for cloud deployment")
         try:
-            mcp.run(transport="http", port=port, host="0.0.0.0")
+            mcp.run(transport="http", host="0.0.0.0", port=port)
         except Exception as e:
             logger.exception(f"Server error: {e}")
             raise
     else:
-        logger.info("Running server with stdio transport for local development")
+        logger.info("Running server with stdio transport for local development / Cursor")
         try:
             mcp.run(transport="stdio")
         except KeyboardInterrupt:
