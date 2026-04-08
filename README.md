@@ -54,6 +54,13 @@ Or run directly:
 python server.py
 ```
 
+### Tests (development)
+
+```bash
+uv sync --group dev
+uv run pytest
+```
+
 ## Usage
 
 The server provides a single tool: `get_weather_forecast`
@@ -113,7 +120,7 @@ The tool returns a `WeatherForecast` object with:
 
 Each hourly forecast includes:
 - Temperature, wind (speed/direction/gusts)
-- Precipitation (type/amount)
+- Precipitation (SNOW1 predominant type 0–12 and mean amount mm/h)
 - Humidity, visibility, pressure
 - Cloud cover, thunder probability
 - Weather symbol and its meaning
@@ -142,7 +149,7 @@ SMHI provides 27 weather symbols automatically decoded to human-readable descrip
 
 ## API Information
 
-- **Data source**: SMHI PMP3G API
+- **Data source**: SMHI **SNOW1gv1** meteorological forecast API (`snow1g/version/1` point endpoint). Legacy PMP3G v2 was deprecated in favour of SNOW1; see [SMHI announcement (2025-09-12)](https://www.smhi.se/data/om-smhis-data/uppdateringar-oppna-data/uppdateringar-i-smhis-oppna-data/2025-09-12-nya-apier-for-meteorologiska-prognoser-och-analyser) and [SNOW1 parameter reference](https://opendata.smhi.se/metfcst/snow1gv1/parameters).
 - **License**: Creative Commons Attribution 4.0
 - **Rate limits**: None specified for open data
 - **Documentation**: https://opendata.smhi.se/apidocs/
