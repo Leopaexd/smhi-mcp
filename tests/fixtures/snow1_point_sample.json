@@ -1,0 +1,67 @@
+{
+  "createdTime": "2026-04-08T06:31:37Z",
+  "referenceTime": "2026-04-08T06:15:00Z",
+  "geometry": {
+    "type": "Point",
+    "coordinates": [18.031205, 59.309023]
+  },
+  "timeSeries": [
+    {
+      "time": "2026-04-08T06:00:00Z",
+      "intervalParametersStartTime": "2026-04-08T05:00:00Z",
+      "data": {
+        "air_temperature": 3.6,
+        "wind_from_direction": 351,
+        "wind_speed": 4.4,
+        "wind_speed_of_gust": 8.3,
+        "relative_humidity": 85,
+        "air_pressure_at_mean_sea_level": 1031.7,
+        "visibility_in_air": 14.9,
+        "thunderstorm_probability": 0,
+        "cloud_area_fraction": 8,
+        "precipitation_amount_mean": 0.0,
+        "predominant_precipitation_type_at_surface": 0,
+        "precipitation_frozen_part": -9,
+        "symbol_code": 4
+      }
+    },
+    {
+      "time": "2026-04-08T07:00:00Z",
+      "intervalParametersStartTime": "2026-04-08T06:00:00Z",
+      "data": {
+        "air_temperature": 6.0,
+        "wind_from_direction": 0,
+        "wind_speed": 5.0,
+        "wind_speed_of_gust": 9.0,
+        "relative_humidity": 70,
+        "air_pressure_at_mean_sea_level": 1030.0,
+        "visibility_in_air": 10.0,
+        "thunderstorm_probability": 40,
+        "cloud_area_fraction": 6,
+        "precipitation_amount_mean": 1.2,
+        "predominant_precipitation_type_at_surface": 1,
+        "precipitation_frozen_part": 0,
+        "symbol_code": 19
+      }
+    },
+    {
+      "time": "2026-04-08T08:00:00Z",
+      "intervalParametersStartTime": "2026-04-08T07:00:00Z",
+      "data": {
+        "air_temperature": -1.0,
+        "wind_from_direction": 180,
+        "wind_speed": 3.0,
+        "wind_speed_of_gust": 4.0,
+        "relative_humidity": 90,
+        "air_pressure_at_mean_sea_level": 1025.0,
+        "visibility_in_air": 0.4,
+        "thunderstorm_probability": 0,
+        "cloud_area_fraction": 8,
+        "precipitation_amount_mean": 0.5,
+        "predominant_precipitation_type_at_surface": 5,
+        "precipitation_frozen_part": 100,
+        "symbol_code": 25
+      }
+    }
+  ]
+}
