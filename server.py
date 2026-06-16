@@ -21,9 +21,21 @@ from pydantic import BaseModel, Field
 logger.remove()
 
 # Add ONLY file logging to avoid corrupting the MCP protocol
-os.makedirs("logs", exist_ok=True)
+log_dir = "logs"
+try:
+    os.makedirs(log_dir, exist_ok=True)
+    # Test write to ensure filesystem is writable (e.g., fails on Prefect Horizon)
+    test_path = os.path.join(log_dir, ".write_test")
+    with open(test_path, "w") as f:
+        f.write("check")
+    os.remove(test_path)
+except OSError:
+    # Fallback to /tmp on read-only environments
+    log_dir = "/tmp/logs"
+    os.makedirs(log_dir, exist_ok=True)
+
 logger.add(
-    "logs/smhi_weather_mcp.log",
+    os.path.join(log_dir, "smhi_weather_mcp.log"),
     rotation="1 week",
     retention="1 month",
     level="INFO",
@@ -32,7 +44,7 @@ logger.add(
     diagnose=True,
 )
 logger.add(
-    "logs/smhi_weather_mcp_debug.log",
+    os.path.join(log_dir, "smhi_weather_mcp_debug.log"),
     rotation="1 day",
     retention="1 week",
     level="DEBUG",
